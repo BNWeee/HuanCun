@@ -11,7 +11,9 @@ trait PrefetchParameters {
 }
 
 trait HasPrefetchParameters extends HasHuanCunParameters {
-  val inflightEntries = prefetchOpt.get.inflightEntries
+  val inflightEntries = if(prefetchOpt.nonEmpty)prefetchOpt.get.inflightEntries
+  else if(prefetchRecvOpt.nonEmpty)prefetchRecvOpt.get.inflightEntries
+  else 16
 }
 
 abstract class PrefetchBundle(implicit val p: Parameters) extends Bundle with HasPrefetchParameters

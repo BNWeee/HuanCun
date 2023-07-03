@@ -102,28 +102,36 @@ class TestTop_L2L3()(implicit p: Parameters) extends LazyModule {
   val l1d_nodes = (0 until 2) map( i => createClientNode(s"l1d$i", 32))
   val master_nodes = l1d_nodes
 
-  val l2_nodes = (0 until 2) map( i => LazyModule(new HuanCun()(new Config((_, _, _) => {
+
+  val l2 = LazyModule(new HuanCun()(new Config((_, _, _) => {
     case HCCacheParamsKey => HCCacheParameters(
       name = s"L2",
       level = 2,
       inclusive = false,
       clientCaches = Seq(CacheParameters(sets = 32, ways = 8, blockGranularity = 5, name = "L2")),
+//      prefetch = Some(huancun.prefetch.BOPParameters()),
       prefetch = Some(huancun.prefetch.BOPParameters()),
+      prefetchSend = Some(huancun.prefetch.PrefetchReceiverParams(Level=2)),
       reqField = Seq(PreferCacheField()),
       echoField = Seq(DirtyField())
     )
-  }))).node)
-
+  })))
+  val l2_nodes = (0 until 2) map( i => l2.node)
   val l3 = LazyModule(new HuanCun()(new Config((_, _, _) => {
     case HCCacheParamsKey => HCCacheParameters(
       name = "L3",
       level = 3,
       inclusive = false,
       clientCaches = Seq(CacheParameters(sets = 32, ways = 8, blockGranularity = 5, name = "L3")),
+      prefetch = None,
+      prefetchSend = None,
+      prefetchRecv = Some(huancun.prefetch.PrefetchReceiverParams(n=1,Level=3)),
       echoField = Seq(DirtyField()),
       simulation = true
     )
   })))
+  println("Connecting L2 prefetcher to L3!")
+  l3.pf_recv_node.get := l2.pf_sender_opt.get
 
   val xbar = TLXbar()
   val ram = LazyModule(new TLRAM(AddressSet(0, 0xffffL), beatBytes = 32))
@@ -217,6 +225,7 @@ class TestTop_FullSys()(implicit p: Parameters) extends LazyModule {
       sets = 256,
       inclusive = false,
       clientCaches = Seq(CacheParameters(sets = 128, ways = 4, blockGranularity = log2Ceil(128), name = "L2")),
+//      prefetch = Some(huancun.prefetch.PrefetchReceiverParams()),
       sramClkDivBy2 = true,
       sramDepthDiv = 4,
       simulation = true,

@@ -537,8 +537,8 @@ class MSHR()(implicit p: Parameters) extends BaseMSHR[DirResult, SelfDirWrite, S
   val s_transferput = RegInit(true.B) // writeput to source_a
   val s_writerelease = RegInit(true.B) // sink_c
   val s_writeprobe = RegInit(true.B)
-  val s_triggerprefetch = prefetchOpt.map(_ => RegInit(true.B))
-  val s_prefetchack = prefetchOpt.map(_ => RegInit(true.B))
+  val s_triggerprefetch = if(prefetchOpt.nonEmpty)prefetchOpt.map(_=> RegInit(true.B))else prefetchRecvOpt.map(_=> RegInit(true.B))
+  val s_prefetchack = if(prefetchOpt.nonEmpty)prefetchOpt.map(_ => RegInit(true.B))else prefetchRecvOpt.map(_=> RegInit(true.B))
 
   val w_probeackfirst = RegInit(true.B) // first beat of the last probeack
   val w_probeacklast = RegInit(true.B) // last beat of the last probeack
@@ -1284,6 +1284,8 @@ class MSHR()(implicit p: Parameters) extends BaseMSHR[DirResult, SelfDirWrite, S
     when(io.tasks.prefetch_train.get.fire()) {
       s_triggerprefetch.get := true.B
     }
+  }
+  if(prefetchOpt.nonEmpty||prefetchRecvOpt.nonEmpty){
     when(io.tasks.prefetch_resp.get.fire()) {
       s_prefetchack.get := true.B
     }

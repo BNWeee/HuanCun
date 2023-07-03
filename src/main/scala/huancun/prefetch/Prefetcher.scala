@@ -80,7 +80,29 @@ class PrefetchQueue(implicit p: Parameters) extends PrefetchModule {
 class Prefetcher(parentName:String = "UnKnown")(implicit p: Parameters) extends PrefetchModule {
   val io = IO(new PrefetchIO)
   val io_l2_pf_en = IO(Input(Bool()))
-
+//  prefetchSendOpt.get match{
+//
+//  }
+  prefetchRecvOpt.map({case (receiver:PrefetchReceiverParams) =>
+    cacheParams.level match {
+      case 3 =>
+        dontTouch(io.req);dontTouch(io.recv_addr)
+        println(s"L${cacheParams.level} prefetcher: PrefetchReceiver_llc")
+        val l3_pfReceiver = Module (new PrefetchReceiver_llc())
+//        val pftQueue = Module (new PrefetchQueue)
+        l3_pfReceiver.io.recv_addr := ValidIODelay (io.recv_addr, 2)
+        io.train <> l3_pfReceiver.io.train
+        io.resp <> l3_pfReceiver.io.resp
+        io.req <> l3_pfReceiver.io.req //true connect
+          // send to prq
+          //      pftQueue.io.enq.valid := l3_pfReceiver
+          //      pftQueue.io.enq.bits :=
+          //      pipe.io.in <> pftQueue.io.deq
+//        io.req.ready := l3_pfReceiver.io.req.ready
+      case _ => None
+    }
+  })
+  if(prefetchOpt.nonEmpty)
   prefetchOpt.get match {
     case bop: BOPParameters =>
       val pft = Module(new BestOffsetPrefetch(parentName = parentName))
@@ -92,30 +114,37 @@ class Prefetcher(parentName:String = "UnKnown")(implicit p: Parameters) extends 
       pipe.io.in <> pftQueue.io.deq
       io.req <> pipe.io.out
     case receiver: PrefetchReceiverParams =>
-      val l1_pf = Module(new PrefetchReceiver())
-      val bop = Module(new BestOffsetPrefetch(parentName = parentName)(p.alterPartial({
-        case HCCacheParamsKey => p(HCCacheParamsKey).copy(prefetch = Some(BOPParameters()))
-      })))
-      val pftQueue = Module(new PrefetchQueue)
-      val pipe = Module(new Pipeline(io.req.bits.cloneType, 1))
-      val bop_en = RegNextN(io_l2_pf_en, 2, Some(true.B))
-      // l1 prefetch
-      l1_pf.io.recv_addr := ValidIODelay(io.recv_addr, 2)
-      l1_pf.io.train <> DontCare
-      l1_pf.io.resp <> DontCare
-      // l2 prefetch
-      bop.io.train <> io.train
-      bop.io.resp <> io.resp
-      // send to prq
-      pftQueue.io.enq.valid := l1_pf.io.req.valid || (bop_en && bop.io.req.valid)
-      pftQueue.io.enq.bits := Mux(l1_pf.io.req.valid,
-        l1_pf.io.req.bits,
-        bop.io.req.bits
-      )
-      l1_pf.io.req.ready := true.B
-      bop.io.req.ready := true.B
-      pipe.io.in <> pftQueue.io.deq
-      io.req <> pipe.io.out
-    case _ => assert(cond = false, "Unknown prefetcher")
+      cacheParams.level match{
+        case 2 =>
+          println(s"L${cacheParams.level} prefetcher: BestOffsetPrefetch+PrefetchSender")
+          val l1_pf = Module(new PrefetchReceiver())
+          val bop = Module(new BestOffsetPrefetch(parentName = parentName)(p.alterPartial({
+            case HCCacheParamsKey => p(HCCacheParamsKey).copy(prefetch = Some(BOPParameters()))
+          })))
+          val pftQueue = Module(new PrefetchQueue)
+          val pipe = Module(new Pipeline(io.req.bits.cloneType, 1))
+          val bop_en = RegNextN(io_l2_pf_en, 2, Some(true.B))
+          // l1 prefetch
+          l1_pf.io.recv_addr := ValidIODelay(io.recv_addr, 2)
+          l1_pf.io.train <> DontCare
+          l1_pf.io.resp <> DontCare
+          // l2 prefetch
+          bop.io.train <> io.train
+          bop.io.resp <> io.resp
+          // send to prq
+          pftQueue.io.enq.valid := l1_pf.io.req.valid || (bop_en && bop.io.req.valid)
+          pftQueue.io.enq.bits := Mux(l1_pf.io.req.valid,
+            l1_pf.io.req.bits,
+            bop.io.req.bits
+          )
+          l1_pf.io.req.ready := true.B
+          bop.io.req.ready := true.B
+          pipe.io.in <> pftQueue.io.deq
+          io.req <> pipe.io.out
+        case 3 => None
+      }
+    case _ => None
   }
+
+  this.suggestName(parentName)
 }

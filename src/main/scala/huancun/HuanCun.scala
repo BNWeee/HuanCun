@@ -37,6 +37,8 @@ trait HasHuanCunParameters {
   val p: Parameters
   val cacheParams = p(HCCacheParamsKey)
   val prefetchOpt = cacheParams.prefetch
+  val prefetchSendOpt = cacheParams.prefetchSend
+  val prefetchRecvOpt = cacheParams.prefetchRecv
   val hasPrefetchBit = prefetchOpt.nonEmpty && prefetchOpt.get.hasPrefetchBit
   val hasAliasBits = if(cacheParams.clientCaches.isEmpty) false
     else cacheParams.clientCaches.head.needResolveAlias
@@ -229,12 +231,47 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
   val rst_nodes = ctrl_unit.map(_.core_reset_nodes)
   val intnode = ctrl_unit.map(_.intnode)
 
-  val pf_recv_node: Option[BundleBridgeSink[PrefetchRecv]] = prefetchOpt match {
-    case Some(_: PrefetchReceiverParams) =>
-      Some(BundleBridgeSink(Some(() => new PrefetchRecv)))
+  val pf_sender_opt:Option[BundleBridgeSource[huancun.prefetch.l3PrefetchRecv]] = prefetchSendOpt match{
+    case Some(pf: PrefetchReceiverParams) =>
+      cacheParams.level match{
+        case 2 =>
+          Some(BundleBridgeSource(Some(() => new l3PrefetchRecv())))
+        case _ => None
+      }
+
     case _ => None
   }
-
+//  val pf_recv_node = prefetchRecvOpt match {
+//    case Some(pf: PrefetchReceiverParams) =>
+//      cacheParams.level match{
+//        case 2 => Some(BundleBridgeSink(Some(() => new l2PrefetchRecv)))
+//        case 3 => Some(BundleBridgeSink(Some(() => new l3PrefetchRecv)))
+//        case _ => assert(false.B,"must explicitly set cache level")
+//          None
+//
+//      }
+//
+//    case _ => None
+//  }
+  val pf_l2recv_node = cacheParams.level match{
+    case 2 =>
+      prefetchRecvOpt match{
+          case Some(x) => Some(BundleBridgeSink(Some(() => new l2PrefetchRecv)))
+          case _ => None
+        }
+    case _ => None
+  }
+  val pf_l3recv_node = cacheParams.level match{
+    case 3 =>
+      prefetchRecvOpt match {
+        case Some(x) => Some(BundleBridgeSink(Some(() => new l3PrefetchRecv)))
+        case _ => None
+      }
+    case _ => None
+  }
+  val pf_recv_node = if(pf_l2recv_node.nonEmpty)pf_l2recv_node
+  else if(pf_l3recv_node.nonEmpty)pf_l3recv_node
+  else None
   lazy val module = new LazyModuleImp(this) {
     val banks = node.in.size
     val io = IO(new Bundle {
@@ -251,7 +288,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
     val sizeStr = sizeBytesToStr(sizeBytes)
     val bankBits = if(banks == 1) 0 else log2Up(banks)
     val inclusion = if (cacheParams.inclusive) "Inclusive" else "Non-inclusive"
-    val prefetch = "prefetch: " + cacheParams.prefetch
+    val prefetch = if(cacheParams.prefetch.nonEmpty) "prefetch: " + cacheParams.prefetch else "prefetch: " + cacheParams.prefetchRecv
     println(s"====== ${inclusion} ${cacheParams.name} ($sizeStr * $banks-bank) $prefetch ======")
     println(s"bankBits: ${bankBits}")
     println(s"sets:${cacheParams.sets} ways:${cacheParams.ways} blockBytes:${cacheParams.blockBytes}")
@@ -284,24 +321,60 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
       }
       out <> arbiter.io.out
     }
-    val prefetcher = prefetchOpt.map(_ => Module(new Prefetcher(parentName = parentName + "prefetcher_")(pftParams)))
-    val prefetchTrains = prefetchOpt.map(_ => Wire(Vec(banks, DecoupledIO(new PrefetchTrain()(pftParams)))))
-    val prefetchResps = prefetchOpt.map(_ => Wire(Vec(banks, DecoupledIO(new PrefetchResp()(pftParams)))))
+//    val prefetcher = prefetchOpt.map(_ => Module(new Prefetcher(parentName = parentName + "prefetcher_")(pftParams)))
+    val prefetcher:Option[Prefetcher] = if(prefetchOpt.nonEmpty || prefetchSendOpt.nonEmpty || prefetchRecvOpt.nonEmpty){
+      Some(Module(new Prefetcher(parentName = s"L${cacheParams.level}_prefetcher")(pftParams)))
+    }else{
+      None
+    }
+
+    val prefetchTrains =
+      if(prefetchOpt.nonEmpty) Some(Wire(Vec(banks, DecoupledIO(new PrefetchTrain()(pftParams)))))
+      else None
+    val prefetchResps =
+      if(prefetchOpt.nonEmpty||prefetchRecvOpt.nonEmpty) Some(Wire(Vec(banks, DecoupledIO(new PrefetchResp()(pftParams)))))
+      else None
     val prefetchReqsReady = WireInit(VecInit(Seq.fill(banks)(false.B)))
+
     prefetchOpt.foreach {
       _ =>
         arbTasks(prefetcher.get.io.train, prefetchTrains.get, Some("prefetch_train"))
         prefetcher.get.io.req.ready := Cat(prefetchReqsReady).orR
         arbTasks(prefetcher.get.io.resp, prefetchResps.get, Some("prefetch_resp"))
     }
-    pf_recv_node match {
-      case Some(x) =>
-        prefetcher.get.io.recv_addr.valid := x.in.head._1.addr_valid
-        prefetcher.get.io.recv_addr.bits := x.in.head._1.addr
-        prefetcher.get.io_l2_pf_en := x.in.head._1.l2_pf_en
-      case None =>
-        prefetcher.foreach(_.io.recv_addr := DontCare)
-        prefetcher.foreach(_.io_l2_pf_en := DontCare)
+
+    prefetcher.foreach(_.io.recv_addr := DontCare)
+    prefetcher.foreach(_.io_l2_pf_en := true.B)
+//    if(prefetchRecvOpt.nonEmpty)
+    prefetchSendOpt.foreach(pf => {
+      pf_sender_opt.get.out.head._1.addr_valid := prefetcher.get.io.recv_addr.valid
+      pf_sender_opt.get.out.head._1.addr := prefetcher.get.io.recv_addr.bits
+      pf_sender_opt.get.out.head._1.pf_en := true.B
+    })
+    prefetchRecvOpt.foreach(pf => {
+      prefetcher.get.io.req.ready := Cat(prefetchReqsReady).orR
+      arbTasks(prefetcher.get.io.resp, prefetchResps.get, Some("prefetch_resp"))
+    })
+
+    cacheParams.level match{
+      case 2 =>
+        if(pf_l2recv_node.nonEmpty)
+          pf_l2recv_node.get match {
+          case x:BundleBridgeSink[huancun.prefetch.l2PrefetchRecv] =>
+            prefetcher.get.io.recv_addr.valid := x.in.head._1.addr_valid
+            prefetcher.get.io.recv_addr.bits := x.in.head._1.addr
+            prefetcher.get.io_l2_pf_en := x.in.head._1.pf_en
+        }
+      case 3 =>
+        if(pf_l3recv_node.nonEmpty){
+          pf_l3recv_node.get match {
+            case x: BundleBridgeSink[huancun.prefetch.l3PrefetchRecv] =>
+              prefetcher.get.io.recv_addr.valid := x.in.head._1.addr_valid
+              prefetcher.get.io.recv_addr.bits := x.in.head._1.addr
+              prefetcher.get.io_l2_pf_en := x.in.head._1.pf_en
+              prefetcher.get.io.train := DontCare
+          }
+        }
     }
 
     def bank_eq(set: UInt, bankId: Int, bankBits: Int): Bool = {
@@ -351,23 +424,29 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
           case (s, p) =>
             s.req.valid := p.io.req.valid && bank_eq(p.io.req.bits.set, i, bankBits)
             s.req.bits := p.io.req.bits
+            s.train.ready := DontCare
             prefetchReqsReady(i) := s.req.ready && bank_eq(p.io.req.bits.set, i, bankBits)
-            val train = Pipeline(s.train)
+            prefetchOpt.map(_ => {
+              val train = Pipeline(s.train)
+              prefetchTrains.get(i) <> train
+              if(bankBits != 0){
+                val train_full_addr = Cat(
+                  train.bits.tag, train.bits.set, i.U(bankBits.W), 0.U(offsetBits.W)
+                )
+                val (train_tag, train_set, _) = s.parseFullAddress(train_full_addr)
+                prefetchTrains.get(i).bits.tag := train_tag
+                prefetchTrains.get(i).bits.set := train_set
+              }
+            })
             val resp = Pipeline(s.resp)
-            prefetchTrains.get(i) <> train
             prefetchResps.get(i) <> resp
+            resp.ready:=true.B
             // restore to full address
             if(bankBits != 0){
-              val train_full_addr = Cat(
-                train.bits.tag, train.bits.set, i.U(bankBits.W), 0.U(offsetBits.W)
-              )
-              val (train_tag, train_set, _) = s.parseFullAddress(train_full_addr)
               val resp_full_addr = Cat(
                 resp.bits.tag, resp.bits.set, i.U(bankBits.W), 0.U(offsetBits.W)
               )
               val (resp_tag, resp_set, _) = s.parseFullAddress(resp_full_addr)
-              prefetchTrains.get(i).bits.tag := train_tag
-              prefetchTrains.get(i).bits.set := train_set
               prefetchResps.get(i).bits.tag := resp_tag
               prefetchResps.get(i).bits.set := resp_set
             }

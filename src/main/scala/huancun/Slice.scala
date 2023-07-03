@@ -32,13 +32,15 @@ class Slice(parentName: String = "Unknown")(implicit p: Parameters) extends Huan
   val io = IO(new Bundle {
     val in = Flipped(TLBundle(edgeIn.bundle))
     val out = TLBundle(edgeOut.bundle)
-    val prefetch = prefetchOpt.map(_ => Flipped(new PrefetchIO))
+    val prefetch: Option[PrefetchIO] =
+      if (prefetchOpt.nonEmpty || prefetchRecvOpt.nonEmpty) Some(Flipped(new PrefetchIO))
+      else None
     val ctl_req = Flipped(DecoupledIO(new CtrlReq()))
     val ctl_resp = DecoupledIO(new CtrlResp())
     val ctl_ecc = DecoupledIO(new EccInfo())
   })
   println(s"clientBits: $clientBits")
-
+  println(s"$prefetchOpt | $prefetchRecvOpt | ${io.prefetch.get}")
   val ctrl = cacheParams.ctrl.map(_ => Module(new SliceCtrl()))
 
   def ctrl_arb[T <: Data](source: DecoupledIO[T], ctrl: Option[DecoupledIO[T]]): DecoupledIO[T] ={
@@ -144,7 +146,15 @@ class Slice(parentName: String = "Unknown")(implicit p: Parameters) extends Huan
     alloc_A_arb.io.in(0) <> a_req
     alloc_A_arb.io.in(1) <> pftReqToMSHRReq(io.prefetch.get.req)
     a_req_buffer.io.in <> alloc_A_arb.io.out
-  } else {
+  }else if(prefetchRecvOpt.nonEmpty){
+    io.prefetch.get.train := DontCare
+    io.prefetch.get.recv_addr := DontCare
+    val alloc_A_arb = Module(new Arbiter(new MSHRRequest, 2))
+    alloc_A_arb.io.in(0) <> a_req
+    alloc_A_arb.io.in(1) <> pftReqToMSHRReq(io.prefetch.get.req)
+    a_req_buffer.io.in <> alloc_A_arb.io.out
+  }
+  else {
     a_req_buffer.io.in <> a_req
   }
   mshrAlloc.io.a_req <> a_req_buffer.io.out
@@ -505,11 +515,14 @@ class Slice(parentName: String = "Unknown")(implicit p: Parameters) extends Huan
   io.prefetch.foreach { pft =>
 
     // connect abc mshrs to prefetcher
-    arbTasks(
-      pft.train,
-      abc_mshr.map(_.io.tasks.prefetch_train.get),
-      Some("prefetchTrain")
-    )
+    prefetchOpt.map(_ =>{
+      println("connect abc mshrs train Bundle to prefetcher")
+      arbTasks(
+        pft.train,
+        abc_mshr.map(_.io.tasks.prefetch_train.get),
+        Some("prefetchTrain")
+      )
+    })
     arbTasks(
       pft.resp,
       abc_mshr.map(_.io.tasks.prefetch_resp.get),
