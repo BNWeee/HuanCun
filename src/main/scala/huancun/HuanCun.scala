@@ -231,14 +231,13 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
   val rst_nodes = ctrl_unit.map(_.core_reset_nodes)
   val intnode = ctrl_unit.map(_.intnode)
 
-  val pf_sender_opt:Option[BundleBridgeSource[huancun.prefetch.l3PrefetchRecv]] = prefetchSendOpt match{
+  val pf_send_node:Option[BundleBridgeSource[l2PrefetchRecv]] = prefetchSendOpt match{
     case Some(pf: PrefetchReceiverParams) =>
       cacheParams.level match{
         case 2 =>
-          Some(BundleBridgeSource(Some(() => new l3PrefetchRecv())))
+          Some(BundleBridgeSource(Some(() => new l2PrefetchRecv())))
         case _ => None
       }
-
     case _ => None
   }
 //  val pf_recv_node = prefetchRecvOpt match {
@@ -261,10 +260,11 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
         }
     case _ => None
   }
+
   val pf_l3recv_node = cacheParams.level match{
     case 3 =>
       prefetchRecvOpt match {
-        case Some(x) => Some(BundleBridgeSink(Some(() => new l3PrefetchRecv)))
+        case Some(x) =>  Some(BundleBridgeSink(Some(() => new huancun.prefetch.l2PrefetchRecv())))
         case _ => None
       }
     case _ => None
@@ -345,11 +345,10 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
 
     prefetcher.foreach(_.io.recv_addr := DontCare)
     prefetcher.foreach(_.io_l2_pf_en := true.B)
-//    if(prefetchRecvOpt.nonEmpty)
     prefetchSendOpt.foreach(pf => {
-      pf_sender_opt.get.out.head._1.addr_valid := prefetcher.get.io.recv_addr.valid
-      pf_sender_opt.get.out.head._1.addr := prefetcher.get.io.recv_addr.bits
-      pf_sender_opt.get.out.head._1.pf_en := true.B
+      pf_send_node.get.out.head._1.addr_valid := prefetcher.get.io.recv_addr.valid
+      pf_send_node.get.out.head._1.addr := prefetcher.get.io.recv_addr.bits
+      pf_send_node.get.out.head._1.pf_en := true.B
     })
     prefetchRecvOpt.foreach(pf => {
       prefetcher.get.io.req.ready := Cat(prefetchReqsReady).orR
@@ -367,13 +366,26 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
         }
       case 3 =>
         if(pf_l3recv_node.nonEmpty){
-          pf_l3recv_node.get match {
-            case x: BundleBridgeSink[huancun.prefetch.l3PrefetchRecv] =>
-              prefetcher.get.io.recv_addr.valid := x.in.head._1.addr_valid
-              prefetcher.get.io.recv_addr.bits := x.in.head._1.addr
-              prefetcher.get.io_l2_pf_en := x.in.head._1.pf_en
-              prefetcher.get.io.train := DontCare
-          }
+//          val NumCores=cacheParams.tiles
+//          val arbiter = Module(new Arbiter(new huancun.prefetch.l2PrefetchRecv(), NumCores))
+//          arbiter.suggestName(s"pf_l3recv_node_arb")
+//          for(i<- 0 until NumCores) {
+//            val pf_l3recv_nodeVec = pf_l3recv_node.get.in.head._1
+//            arbiter.io.in(i).valid := pf_l3recv_nodeVec.data(i).addr_valid
+//            arbiter.io.in(i).bits.addr_valid := pf_l3recv_nodeVec.data(i).addr_valid
+//            arbiter.io.in(i).bits.addr := pf_l3recv_nodeVec.data(i).addr
+//            arbiter.io.in(i).bits.pf_en := pf_l3recv_nodeVec.data(i).pf_en
+//            arbiter.io.in(i).ready := DontCare
+//          }
+//          arbiter.io.out.ready := true.B
+//                prefetcher.get.io.recv_addr.valid := arbiter.io.out.bits.asInstanceOf[huancun.prefetch.l2PrefetchRecv].addr_valid
+//                prefetcher.get.io.recv_addr.bits := arbiter.io.out.bits.asInstanceOf[huancun.prefetch.l2PrefetchRecv].addr
+//                prefetcher.get.io_l2_pf_en := arbiter.io.out.bits.asInstanceOf[huancun.prefetch.l2PrefetchRecv].pf_en
+//                prefetcher.get.io.train := DontCare
+        prefetcher.get.io.recv_addr.valid := pf_l3recv_node.get.in.head._1.addr_valid
+        prefetcher.get.io.recv_addr.bits := pf_l3recv_node.get.in.head._1.addr
+        prefetcher.get.io_l2_pf_en := pf_l3recv_node.get.in.head._1.pf_en
+        prefetcher.get.io.train := DontCare
         }
     }
 

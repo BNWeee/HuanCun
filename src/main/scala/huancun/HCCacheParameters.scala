@@ -100,6 +100,7 @@ case class CacheCtrl
 case class HCCacheParameters
 (
   name: String = "L2",
+  tiles: Int = 1,
   level: Int = 2,
   ways: Int = 4,
   sets: Int = 128,

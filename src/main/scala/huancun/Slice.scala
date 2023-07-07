@@ -40,7 +40,8 @@ class Slice(parentName: String = "Unknown")(implicit p: Parameters) extends Huan
     val ctl_ecc = DecoupledIO(new EccInfo())
   })
   println(s"clientBits: $clientBits")
-  println(s"$prefetchOpt | $prefetchRecvOpt | ${io.prefetch.get}")
+  println(s"prefetchOpt: $prefetchOpt")
+  println(s"prefetchRecvOpt: $prefetchRecvOpt")
   val ctrl = cacheParams.ctrl.map(_ => Module(new SliceCtrl()))
 
   def ctrl_arb[T <: Data](source: DecoupledIO[T], ctrl: Option[DecoupledIO[T]]): DecoupledIO[T] ={

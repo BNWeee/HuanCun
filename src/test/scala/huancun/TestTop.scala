@@ -8,6 +8,7 @@ import chisel3.stage.{ChiselGeneratorAnnotation, ChiselStage}
 import freechips.rocketchip.util._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
+import huancun.prefetch.PrefetchReceiverXbar
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -103,20 +104,20 @@ class TestTop_L2L3()(implicit p: Parameters) extends LazyModule {
   val master_nodes = l1d_nodes
 
 
-  val l2 = LazyModule(new HuanCun()(new Config((_, _, _) => {
+  val l2 = (0 until 2) map (i => LazyModule(new HuanCun()(new Config((_, _, _) => {
     case HCCacheParamsKey => HCCacheParameters(
       name = s"L2",
       level = 2,
       inclusive = false,
       clientCaches = Seq(CacheParameters(sets = 32, ways = 8, blockGranularity = 5, name = "L2")),
-//      prefetch = Some(huancun.prefetch.BOPParameters()),
+      //      prefetch = Some(huancun.prefetch.BOPParameters()),
       prefetch = Some(huancun.prefetch.BOPParameters()),
-      prefetchSend = Some(huancun.prefetch.PrefetchReceiverParams(Level=2)),
+      prefetchSend = Some(huancun.prefetch.PrefetchReceiverParams()),
       reqField = Seq(PreferCacheField()),
       echoField = Seq(DirtyField())
     )
-  })))
-  val l2_nodes = (0 until 2) map( i => l2.node)
+  }))))
+  val l2_nodes = (0 until 2) map( i => l2(i).node)
   val l3 = LazyModule(new HuanCun()(new Config((_, _, _) => {
     case HCCacheParamsKey => HCCacheParameters(
       name = "L3",
@@ -125,13 +126,28 @@ class TestTop_L2L3()(implicit p: Parameters) extends LazyModule {
       clientCaches = Seq(CacheParameters(sets = 32, ways = 8, blockGranularity = 5, name = "L3")),
       prefetch = None,
       prefetchSend = None,
-      prefetchRecv = Some(huancun.prefetch.PrefetchReceiverParams(n=1,Level=3)),
+      prefetchRecv = Some(huancun.prefetch.PrefetchReceiverParams()),
       echoField = Seq(DirtyField()),
       simulation = true
     )
   })))
-  println("Connecting L2 prefetcher to L3!")
-  l3.pf_recv_node.get := l2.pf_sender_opt.get
+
+  val NumCores=2
+//  val l2_pf_senderVec = BundleBridgeSource(Some(() => new huancun.prefetch.l3PrefetchRecv()))
+//  //      val l3_pf_senderVec = BundleBridgeSource(Some(() =>  Vec(tiles.size, new huancun.prefetch.l3PrefetchRecv())))
+//  val l2_pf_node = Seq.fill(NumCores)(BundleBridgeSink(Some(() => new huancun.prefetch.l2PrefetchRecv())))
+//  for (i <- 0 until NumCores) {
+//    println(s"Connecting L2_${i} prefetcher to L3!")
+//    l2_pf_node(i) := l2(i).pf_sender_opt.get
+//  }
+//
+//  l3.pf_l3recv_node.get := l2_pf_senderVec
+
+  val l3pf_RecvXbar = LazyModule(new PrefetchReceiverXbar(NumCores))
+  for(i <- 0 until NumCores) {
+    l3pf_RecvXbar.inNode(i) := l2(i).pf_sender_opt.get
+  }
+  l3.pf_l3recv_node.get := l3pf_RecvXbar.outNode.head
 
   val xbar = TLXbar()
   val ram = LazyModule(new TLRAM(AddressSet(0, 0xffffL), beatBytes = 32))
@@ -156,6 +172,9 @@ class TestTop_L2L3()(implicit p: Parameters) extends LazyModule {
       case (node, i) =>
         node.makeIOs()(ValName(s"master_port_$i"))
     }
+//    for (i <- 0 until NumCores) {
+//      l2_pf_senderVec.out.head._1.data(i) := l2(i).pf_sender_opt.get.out.head._1
+//    }
   }
 }
 
