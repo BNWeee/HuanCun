@@ -145,7 +145,7 @@ class TestTop_L2L3()(implicit p: Parameters) extends LazyModule {
 
   val l3pf_RecvXbar = LazyModule(new PrefetchReceiverXbar(NumCores))
   for(i <- 0 until NumCores) {
-    l3pf_RecvXbar.inNode(i) := l2(i).pf_sender_opt.get
+    l3pf_RecvXbar.inNode(i) := l2(i).pf_send_node.get
   }
   l3.pf_l3recv_node.get := l3pf_RecvXbar.outNode.head
 
