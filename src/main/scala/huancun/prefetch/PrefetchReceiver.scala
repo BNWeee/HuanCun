@@ -16,7 +16,8 @@ abstract class PrefetchRecv extends Bundle {
 
 class l2PrefetchRecv extends PrefetchRecv {
 }
-
+class l2PrefetchSend extends PrefetchRecv {
+}
 class l3PrefetchRecv extends Bundle{
   val data=Vec(2,new l2PrefetchRecv())
 }
@@ -36,6 +37,7 @@ class PrefetchReceiver()(implicit p: Parameters) extends PrefetchModule {
   io.req.bits.set := parseFullAddress(io.recv_addr.bits)._2
   io.req.bits.needT := false.B
   io.req.bits.isBOP := false.B
+  io.req.bits.isHint2llc := DontCare
   io.req.bits.source := 0.U // TODO: ensure source 0 is dcache
   io.req.valid := io.recv_addr.valid
 
@@ -45,13 +47,14 @@ class PrefetchReceiver_llc()(implicit p: Parameters) extends PrefetchModule {
   val io = IO(new PrefetchIO())
   io.train:=DontCare
   io.resp:=DontCare
-  io.recv_addr:=DontCare
-  io.req.bits.tag := parseFullAddress(io.recv_addr.bits)._1
-  io.req.bits.set := parseFullAddress(io.recv_addr.bits)._2
-  io.req.bits.needT := false.B
-  io.req.bits.isBOP := false.B
-  io.req.bits.source := 0.U //FIXME: ensure source id is in l2cache
-  io.req.valid := RegNextN(io.recv_addr.valid, 2, Some(true.B))
+
+  io.req.valid :=RegNextN(io.recv_addr.valid,3)
+  io.req.bits.tag := RegNextN(parseAddress(io.recv_addr.bits)._1,3)
+  io.req.bits.set := RegNextN(parseAddress(io.recv_addr.bits)._2,3)
+  io.req.bits.needT := RegNextN(false.B,3)
+  io.req.bits.isBOP := RegNextN(false.B,3)
+  io.req.bits.isHint2llc := DontCare
+  io.req.bits.source := RegNextN(72.U,3) //FIXME: ensure source id is l2cache
   io.req.ready := DontCare
 }
 

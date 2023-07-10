@@ -80,17 +80,15 @@ class PrefetchQueue(implicit p: Parameters) extends PrefetchModule {
 class Prefetcher(parentName:String = "UnKnown")(implicit p: Parameters) extends PrefetchModule {
   val io = IO(new PrefetchIO)
   val io_l2_pf_en = IO(Input(Bool()))
-//  prefetchSendOpt.get match{
-//
-//  }
+  val io_llc = if(prefetchSendOpt.nonEmpty) Some(IO(Output(new l2PrefetchSend))) else None
   prefetchRecvOpt.map({case (receiver:PrefetchReceiverParams) =>
     cacheParams.level match {
       case 3 =>
         dontTouch(io.req);dontTouch(io.recv_addr)
         println(s"L${cacheParams.level} prefetcher: PrefetchReceiver_llc")
-        val l3_pfReceiver = Module (new PrefetchReceiver_llc())
+        val l3_pfReceiver = Module(new PrefetchReceiver_llc())
 //        val pftQueue = Module (new PrefetchQueue)
-        l3_pfReceiver.io.recv_addr := ValidIODelay (io.recv_addr, 2)
+        l3_pfReceiver.io.recv_addr := io.recv_addr
         io.train <> l3_pfReceiver.io.train
         io.resp <> l3_pfReceiver.io.resp
         io.req <> l3_pfReceiver.io.req //true connect
@@ -132,7 +130,7 @@ class Prefetcher(parentName:String = "UnKnown")(implicit p: Parameters) extends 
           bop.io.train <> io.train
           bop.io.resp <> io.resp
           // send to prq
-          pftQueue.io.enq.valid := l1_pf.io.req.valid || (bop_en && bop.io.req.valid)
+          pftQueue.io.enq.valid := false.B && (l1_pf.io.req.valid || (bop_en && bop.io.req.valid))
           pftQueue.io.enq.bits := Mux(l1_pf.io.req.valid,
             l1_pf.io.req.bits,
             bop.io.req.bits
@@ -141,6 +139,15 @@ class Prefetcher(parentName:String = "UnKnown")(implicit p: Parameters) extends 
           bop.io.req.ready := true.B
           pipe.io.in <> pftQueue.io.deq
           io.req <> pipe.io.out
+          // llc prefetchSend
+          prefetchSendOpt match{
+              case Some(x) =>
+                println("prefetchSendOpt sending out")
+                io_llc.get.pf_en:=true.B
+                io_llc.get.addr_valid := io.req.valid
+                io_llc.get.addr := Cat(io.req.bits.tag,io.req.bits.set,0.U((offsetBits+bankBits).W))
+              case _ => None
+          }
         case 3 => None
       }
     case _ => None

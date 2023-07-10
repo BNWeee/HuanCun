@@ -111,7 +111,7 @@ class TestTop_L2L3()(implicit p: Parameters) extends LazyModule {
       inclusive = false,
       clientCaches = Seq(CacheParameters(sets = 32, ways = 8, blockGranularity = 5, name = "L2")),
       //      prefetch = Some(huancun.prefetch.BOPParameters()),
-      prefetch = Some(huancun.prefetch.BOPParameters()),
+      prefetch = Some(huancun.prefetch.PrefetchReceiverParams()),
       prefetchSend = Some(huancun.prefetch.PrefetchReceiverParams()),
       reqField = Seq(PreferCacheField()),
       echoField = Seq(DirtyField())
@@ -244,7 +244,7 @@ class TestTop_FullSys()(implicit p: Parameters) extends LazyModule {
       sets = 256,
       inclusive = false,
       clientCaches = Seq(CacheParameters(sets = 128, ways = 4, blockGranularity = log2Ceil(128), name = "L2")),
-//      prefetch = Some(huancun.prefetch.PrefetchReceiverParams()),
+      prefetchRecv = Some(huancun.prefetch.PrefetchReceiverParams()),
       sramClkDivBy2 = true,
       sramDepthDiv = 4,
       simulation = true,

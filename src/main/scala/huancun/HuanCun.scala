@@ -346,9 +346,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
     prefetcher.foreach(_.io.recv_addr := DontCare)
     prefetcher.foreach(_.io_l2_pf_en := true.B)
     prefetchSendOpt.foreach(pf => {
-      pf_send_node.get.out.head._1.addr_valid := prefetcher.get.io.recv_addr.valid
-      pf_send_node.get.out.head._1.addr := prefetcher.get.io.recv_addr.bits
-      pf_send_node.get.out.head._1.pf_en := true.B
+      pf_send_node.get.out.head._1 <> prefetcher.get.io_llc.get
     })
     prefetchRecvOpt.foreach(pf => {
       prefetcher.get.io.req.ready := Cat(prefetchReqsReady).orR
