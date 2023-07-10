@@ -240,18 +240,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
       }
     case _ => None
   }
-//  val pf_recv_node = prefetchRecvOpt match {
-//    case Some(pf: PrefetchReceiverParams) =>
-//      cacheParams.level match{
-//        case 2 => Some(BundleBridgeSink(Some(() => new l2PrefetchRecv)))
-//        case 3 => Some(BundleBridgeSink(Some(() => new l3PrefetchRecv)))
-//        case _ => assert(false.B,"must explicitly set cache level")
-//          None
-//
-//      }
-//
-//    case _ => None
-//  }
+
   val pf_l2recv_node = cacheParams.level match{
     case 2 =>
       prefetchRecvOpt match{
@@ -269,9 +258,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
       }
     case _ => None
   }
-  val pf_recv_node = if(pf_l2recv_node.nonEmpty)pf_l2recv_node
-  else if(pf_l3recv_node.nonEmpty)pf_l3recv_node
-  else None
+
   lazy val module = new LazyModuleImp(this) {
     val banks = node.in.size
     val io = IO(new Bundle {

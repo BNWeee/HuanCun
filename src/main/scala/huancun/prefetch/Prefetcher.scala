@@ -81,6 +81,7 @@ class Prefetcher(parentName:String = "UnKnown")(implicit p: Parameters) extends 
   val io = IO(new PrefetchIO)
   val io_l2_pf_en = IO(Input(Bool()))
   val io_llc = if(prefetchSendOpt.nonEmpty) Some(IO(Output(new l2PrefetchSend))) else None
+  dontTouch(io.recv_addr)
   prefetchRecvOpt.map({case (receiver:PrefetchReceiverParams) =>
     cacheParams.level match {
       case 3 =>
@@ -144,8 +145,12 @@ class Prefetcher(parentName:String = "UnKnown")(implicit p: Parameters) extends 
               case Some(x) =>
                 println("prefetchSendOpt sending out")
                 io_llc.get.pf_en:=true.B
-                io_llc.get.addr_valid := io.req.valid
-                io_llc.get.addr := Cat(io.req.bits.tag,io.req.bits.set,0.U((offsetBits+bankBits).W))
+                io_llc.get.addr_valid := l1_pf.io.req.valid || bop.io.req.valid
+                val pftReq= Mux(l1_pf.io.req.valid,
+                  l1_pf.io.req.bits,
+                  bop.io.req.bits
+                )
+                io_llc.get.addr := Cat(pftReq.tag,pftReq.set,0.U((offsetBits+bankBits).W))
               case _ => None
           }
         case 3 => None
