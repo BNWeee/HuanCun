@@ -255,7 +255,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
   val pf_l2recv_node = cacheParams.level match{
     case 2 =>
       prefetchRecvOpt match{
-          case Some(x) => Some(BundleBridgeSink(Some(() => new l2PrefetchRecv)))
+          case Some(x) => Some(BundleBridgeSink(Some(() => new PrefetchRecv)))
           case _ => None
         }
     case _ => None
@@ -269,9 +269,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
       }
     case _ => None
   }
-  val pf_recv_node = if(pf_l2recv_node.nonEmpty)pf_l2recv_node
-  else if(pf_l3recv_node.nonEmpty)pf_l3recv_node
-  else None
+
   lazy val module = new LazyModuleImp(this) {
     val banks = node.in.size
     val io = IO(new Bundle {
@@ -344,7 +342,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
     }
 
     prefetcher.foreach(_.io.recv_addr := DontCare)
-    prefetcher.foreach(_.io_l2_pf_en := true.B)
+    prefetcher.foreach(_.io_pf_en := true.B)
     prefetchSendOpt.foreach(pf => {
       pf_send_node.get.out.head._1 <> prefetcher.get.io_llc.get
     })
@@ -357,10 +355,10 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
       case 2 =>
         if(pf_l2recv_node.nonEmpty)
           pf_l2recv_node.get match {
-          case x:BundleBridgeSink[huancun.prefetch.l2PrefetchRecv] =>
+          case x:BundleBridgeSink[PrefetchRecv] =>
             prefetcher.get.io.recv_addr.valid := x.in.head._1.addr_valid
             prefetcher.get.io.recv_addr.bits := x.in.head._1.addr
-            prefetcher.get.io_l2_pf_en := x.in.head._1.pf_en
+            prefetcher.get.io_pf_en := x.in.head._1.l2_pf_en
         }
       case 3 =>
         if(pf_l3recv_node.nonEmpty){
@@ -378,11 +376,11 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
 //          arbiter.io.out.ready := true.B
 //                prefetcher.get.io.recv_addr.valid := arbiter.io.out.bits.asInstanceOf[huancun.prefetch.l2PrefetchRecv].addr_valid
 //                prefetcher.get.io.recv_addr.bits := arbiter.io.out.bits.asInstanceOf[huancun.prefetch.l2PrefetchRecv].addr
-//                prefetcher.get.io_l2_pf_en := arbiter.io.out.bits.asInstanceOf[huancun.prefetch.l2PrefetchRecv].pf_en
+//                prefetcher.get.io_pf_en := arbiter.io.out.bits.asInstanceOf[huancun.prefetch.l2PrefetchRecv].pf_en
 //                prefetcher.get.io.train := DontCare
         prefetcher.get.io.recv_addr.valid := pf_l3recv_node.get.in.head._1.addr_valid
         prefetcher.get.io.recv_addr.bits := pf_l3recv_node.get.in.head._1.addr
-        prefetcher.get.io_l2_pf_en := pf_l3recv_node.get.in.head._1.pf_en
+        prefetcher.get.io_pf_en := pf_l3recv_node.get.in.head._1.pf_en
         prefetcher.get.io.train := DontCare
         }
     }

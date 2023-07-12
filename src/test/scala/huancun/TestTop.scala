@@ -110,8 +110,7 @@ class TestTop_L2L3()(implicit p: Parameters) extends LazyModule {
       level = 2,
       inclusive = false,
       clientCaches = Seq(CacheParameters(sets = 32, ways = 8, blockGranularity = 5, name = "L2")),
-      //      prefetch = Some(huancun.prefetch.BOPParameters()),
-      prefetch = Some(huancun.prefetch.PrefetchReceiverParams()),
+      prefetch = Some(huancun.prefetch.BOPParameters()),
       prefetchSend = Some(huancun.prefetch.PrefetchReceiverParams()),
       reqField = Seq(PreferCacheField()),
       echoField = Seq(DirtyField())
@@ -133,16 +132,6 @@ class TestTop_L2L3()(implicit p: Parameters) extends LazyModule {
   })))
 
   val NumCores=2
-//  val l2_pf_senderVec = BundleBridgeSource(Some(() => new huancun.prefetch.l3PrefetchRecv()))
-//  //      val l3_pf_senderVec = BundleBridgeSource(Some(() =>  Vec(tiles.size, new huancun.prefetch.l3PrefetchRecv())))
-//  val l2_pf_node = Seq.fill(NumCores)(BundleBridgeSink(Some(() => new huancun.prefetch.l2PrefetchRecv())))
-//  for (i <- 0 until NumCores) {
-//    println(s"Connecting L2_${i} prefetcher to L3!")
-//    l2_pf_node(i) := l2(i).pf_sender_opt.get
-//  }
-//
-//  l3.pf_l3recv_node.get := l2_pf_senderVec
-
   val l3pf_RecvXbar = LazyModule(new PrefetchReceiverXbar(NumCores))
   for(i <- 0 until NumCores) {
     l3pf_RecvXbar.inNode(i) := l2(i).pf_send_node.get
@@ -172,9 +161,6 @@ class TestTop_L2L3()(implicit p: Parameters) extends LazyModule {
       case (node, i) =>
         node.makeIOs()(ValName(s"master_port_$i"))
     }
-//    for (i <- 0 until NumCores) {
-//      l2_pf_senderVec.out.head._1.data(i) := l2(i).pf_sender_opt.get.out.head._1
-//    }
   }
 }
 
@@ -218,23 +204,19 @@ class TestTop_FullSys()(implicit p: Parameters) extends LazyModule {
     val clientNode = TLClientNode(Seq(clientParameters))
     clientNode
   }
-
-  val l2_nodes = (0 until nrL2) map (i => LazyModule(new HuanCun()(new Config((_, _, _) => {
+  val l2 = (0 until nrL2) map (i => LazyModule(new HuanCun()(new Config((_, _, _) => {
     case HCCacheParamsKey => HCCacheParameters(
-      name = "L2",
+      name = s"L2",
       level = 2,
-      ways = 4,
-      sets = 128,
       inclusive = false,
-      alwaysReleaseData = true,
-      clientCaches = Seq(CacheParameters("dcache", sets = 32, ways = 8, blockGranularity = 5)),
-      reqField = Seq(PreferCacheField()),
-      echoField = Seq(DirtyField()),
+      clientCaches = Seq(CacheParameters(sets = 32, ways = 8, blockGranularity = 5, name = "L2")),
       prefetch = Some(huancun.prefetch.BOPParameters()),
-      sramDepthDiv = 2,
-      simulation = true
+      prefetchSend = Some(huancun.prefetch.PrefetchReceiverParams()),
+      reqField = Seq(PreferCacheField()),
+      echoField = Seq(DirtyField())
     )
-  }))).node)
+  }))))
+  val l2_nodes = (0 until nrL2) map (i => l2(i).node)
 
   val l3 = LazyModule(new HuanCun()(new Config((_, _, _) => {
     case HCCacheParamsKey => HCCacheParameters(
@@ -244,12 +226,20 @@ class TestTop_FullSys()(implicit p: Parameters) extends LazyModule {
       sets = 256,
       inclusive = false,
       clientCaches = Seq(CacheParameters(sets = 128, ways = 4, blockGranularity = log2Ceil(128), name = "L2")),
+      prefetch = None,
+      prefetchSend = None,
       prefetchRecv = Some(huancun.prefetch.PrefetchReceiverParams()),
       sramClkDivBy2 = true,
       sramDepthDiv = 4,
       simulation = true,
     )
   })))
+  val NumCores=1
+  val l3pf_RecvXbar = LazyModule(new PrefetchReceiverXbar(NumCores))
+  for(i <- 0 until NumCores) {
+    l3pf_RecvXbar.inNode(i) := l2(i).pf_send_node.get
+  }
+  l3.pf_l3recv_node.get := l3pf_RecvXbar.outNode.head
 
   val l1d_nodes = (0 until 2) map (i => createL1Node(s"l1d$i", 32))
   val dma_node = createDMANode(s"dma", 16)

@@ -77,6 +77,16 @@ case class PreferCacheField() extends BundleField(PreferCacheKey) {
   }
 }
 
+case object Hint2llcKey extends ControlKey[Bool](name = "preferCache")
+
+case class Hint2llcField() extends BundleField(Hint2llcKey) {
+  override def data: Bool = Output(Bool())
+
+  override def default(x: Bool): Unit = {
+    x := false.B
+  }
+}
+
 // indicate whether this block is dirty or not (only used in handle Release/ReleaseData)
 // now it only works for non-inclusive cache (ignored in inclusive cache)
 case object DirtyKey extends ControlKey[Bool](name = "blockisdirty")
