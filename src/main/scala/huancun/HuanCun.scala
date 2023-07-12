@@ -244,7 +244,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
   val pf_l2recv_node = cacheParams.level match{
     case 2 =>
       prefetchRecvOpt match{
-          case Some(x) => Some(BundleBridgeSink(Some(() => new PrefetchRecv)))
+          case Some(x) => Some(BundleBridgeSink(Some(() => new huancun.prefetch.PrefetchRecv())))
           case _ => None
         }
     case _ => None
@@ -344,29 +344,13 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
       case 2 =>
         if(pf_l2recv_node.nonEmpty)
           pf_l2recv_node.get match {
-          case x:BundleBridgeSink[PrefetchRecv] =>
+          case x:BundleBridgeSink[huancun.prefetch.PrefetchRecv] =>
             prefetcher.get.io.recv_addr.valid := x.in.head._1.addr_valid
             prefetcher.get.io.recv_addr.bits := x.in.head._1.addr
-            prefetcher.get.io_pf_en := x.in.head._1.l2_pf_en
+            prefetcher.get.io_pf_en := x.in.head._1.pf_en
         }
       case 3 =>
         if(pf_l3recv_node.nonEmpty){
-//          val NumCores=cacheParams.tiles
-//          val arbiter = Module(new Arbiter(new huancun.prefetch.l2PrefetchRecv(), NumCores))
-//          arbiter.suggestName(s"pf_l3recv_node_arb")
-//          for(i<- 0 until NumCores) {
-//            val pf_l3recv_nodeVec = pf_l3recv_node.get.in.head._1
-//            arbiter.io.in(i).valid := pf_l3recv_nodeVec.data(i).addr_valid
-//            arbiter.io.in(i).bits.addr_valid := pf_l3recv_nodeVec.data(i).addr_valid
-//            arbiter.io.in(i).bits.addr := pf_l3recv_nodeVec.data(i).addr
-//            arbiter.io.in(i).bits.pf_en := pf_l3recv_nodeVec.data(i).pf_en
-//            arbiter.io.in(i).ready := DontCare
-//          }
-//          arbiter.io.out.ready := true.B
-//                prefetcher.get.io.recv_addr.valid := arbiter.io.out.bits.asInstanceOf[huancun.prefetch.l2PrefetchRecv].addr_valid
-//                prefetcher.get.io.recv_addr.bits := arbiter.io.out.bits.asInstanceOf[huancun.prefetch.l2PrefetchRecv].addr
-//                prefetcher.get.io_pf_en := arbiter.io.out.bits.asInstanceOf[huancun.prefetch.l2PrefetchRecv].pf_en
-//                prefetcher.get.io.train := DontCare
         prefetcher.get.io.recv_addr.valid := pf_l3recv_node.get.in.head._1.addr_valid
         prefetcher.get.io.recv_addr.bits := pf_l3recv_node.get.in.head._1.addr
         prefetcher.get.io_pf_en := pf_l3recv_node.get.in.head._1.pf_en

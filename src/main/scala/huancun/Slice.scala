@@ -630,7 +630,7 @@ class Slice(parentName: String = "Unknown")(implicit p: Parameters) extends Huan
     val address = Cat(pftReq.bits.tag, pftReq.bits.set, 0.U(offsetBits.W))
     val (tag, set, off) = parseAddress(address)
     mshrReq.valid := pftReq.valid
-    mshrReq.bits.opcode := TLMessages.Hint
+    if(cacheParams.level==3) mshrReq.bits.opcode := TLMessages.AcquireBlock else mshrReq.bits.opcode := TLMessages.Hint
     mshrReq.bits.param := Mux(pftReq.bits.needT, TLHints.PREFETCH_WRITE, TLHints.PREFETCH_READ)
     mshrReq.bits.size := log2Up(blockBytes).U
     mshrReq.bits.source := pftReq.bits.source
