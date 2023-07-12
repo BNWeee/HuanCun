@@ -244,7 +244,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
   val pf_l2recv_node = cacheParams.level match{
     case 2 =>
       prefetchRecvOpt match{
-          case Some(x) => Some(BundleBridgeSink(Some(() => new PrefetchRecv)))
+          case Some(x) => Some(BundleBridgeSink(Some(() => new huancun.prefetch.PrefetchRecv())))
           case _ => None
         }
     case _ => None
@@ -344,10 +344,10 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
       case 2 =>
         if(pf_l2recv_node.nonEmpty)
           pf_l2recv_node.get match {
-          case x:BundleBridgeSink[PrefetchRecv] =>
+          case x:BundleBridgeSink[huancun.prefetch.PrefetchRecv] =>
             prefetcher.get.io.recv_addr.valid := x.in.head._1.addr_valid
             prefetcher.get.io.recv_addr.bits := x.in.head._1.addr
-            prefetcher.get.io_pf_en := x.in.head._1.l2_pf_en
+            prefetcher.get.io_pf_en := x.in.head._1.pf_en
         }
       case 3 =>
         if(pf_l3recv_node.nonEmpty){
