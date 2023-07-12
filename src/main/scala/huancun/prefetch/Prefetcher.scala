@@ -79,7 +79,7 @@ class PrefetchQueue(implicit p: Parameters) extends PrefetchModule {
 
 class Prefetcher(parentName:String = "UnKnown")(implicit p: Parameters) extends PrefetchModule {
   val io = IO(new PrefetchIO)
-  val io_pf_en = IO(Input(Bool()))
+  val io_pf_en = IO(Input(Bool()));dontTouch(io_pf_en)
   val io_llc = if(prefetchSendOpt.nonEmpty) Some(IO(Output(new l2PrefetchSend))) else None
   //configSwitch
   //L2-->1.l1prefetchRecv 2.l2prefetch 3.l3prefetchSend
@@ -118,7 +118,7 @@ class Prefetcher(parentName:String = "UnKnown")(implicit p: Parameters) extends 
       bop.io.train <> io.train
       bop.io.resp <> io.resp
       // send to prq
-      pftQueue.io.enq.valid := false.B && (l1_pf.io.req.valid || (bop_en && bop.io.req.valid))
+      pftQueue.io.enq.valid := l1_pf.io.req.valid || (bop_en && bop.io.req.valid)
       pftQueue.io.enq.bits := Mux(l1_pf.io.req.valid,
         l1_pf.io.req.bits,
         bop.io.req.bits

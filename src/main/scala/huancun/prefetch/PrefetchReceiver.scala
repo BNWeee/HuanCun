@@ -68,8 +68,10 @@ class PrefetchReceiverXbar(val clientNum:Int=2)(implicit p: Parameters) extends 
       arbiter.io.in(i).bits.addr := inNode(i).in.head._1.addr
       arbiter.io.in(i).bits.pf_en := inNode(i).in.head._1.pf_en
       arbiter.io.in(i).ready := DontCare
+      dontTouch(arbiter.io.in(i).bits)
     }
     outNode.head.out.head._1 <> arbiter.io.out.bits
     arbiter.io.out.ready := true.B
+
   }
 }

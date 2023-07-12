@@ -355,6 +355,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
         prefetcher.get.io.recv_addr.bits := pf_l3recv_node.get.in.head._1.addr
         prefetcher.get.io_pf_en := pf_l3recv_node.get.in.head._1.pf_en
         prefetcher.get.io.train := DontCare
+        prefetcher.get.io.train := DontCare
         }
     }
 
