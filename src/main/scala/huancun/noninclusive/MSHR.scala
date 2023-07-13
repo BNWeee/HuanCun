@@ -77,7 +77,7 @@ class MSHR()(implicit p: Parameters) extends BaseMSHR[DirResult, SelfDirWrite, S
   val new_self_meta = WireInit(self_meta)
   val new_clients_meta = WireInit(clients_meta)
   val req_acquire = req.opcode === AcquireBlock || req.opcode === AcquirePerm
-  val req_acquireFromPrefetch = req.opcode === AcquireBlock && req.isPrefetch.getOrElse(false.B)
+  val req_isl3Prefetch = req.isPrefetch.getOrElse(false.B) && cacheParams.level.equals(3).asBool
   val req_put = req.opcode(2,1) === 0.U
   val req_needT = needT(req.opcode, req.param)
   val promoteT_safe = RegInit(true.B)
@@ -794,8 +794,10 @@ class MSHR()(implicit p: Parameters) extends BaseMSHR[DirResult, SelfDirWrite, S
         }
     }
     // need grantack
-    when(req_acquire && !req.isPrefetch.getOrElse(false.B)) {
-      w_grantack := false.B
+    when(req_acquire) {
+      when(!req_isl3Prefetch) {
+        w_grantack := false.B
+      }
       when(!acquirePermMiss && (self_meta.hit || preferCache)) {
         s_wbselfdir := false.B
       }
@@ -852,7 +854,7 @@ class MSHR()(implicit p: Parameters) extends BaseMSHR[DirResult, SelfDirWrite, S
       }
       when(req.fromA) {
         s_execute := false.B
-        when(req_acquire && !req.isPrefetch.getOrElse(false.B)){
+        when(req_acquire && !req_isl3Prefetch){
           w_grantack := false.B
         }
       }
