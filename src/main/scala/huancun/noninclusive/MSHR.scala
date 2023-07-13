@@ -77,6 +77,7 @@ class MSHR()(implicit p: Parameters) extends BaseMSHR[DirResult, SelfDirWrite, S
   val new_self_meta = WireInit(self_meta)
   val new_clients_meta = WireInit(clients_meta)
   val req_acquire = req.opcode === AcquireBlock || req.opcode === AcquirePerm
+  val req_acquireFromPrefetch = req.opcode === AcquireBlock && req.isPrefetch.getOrElse(false.B)
   val req_put = req.opcode(2,1) === 0.U
   val req_needT = needT(req.opcode, req.param)
   val promoteT_safe = RegInit(true.B)
@@ -723,7 +724,7 @@ class MSHR()(implicit p: Parameters) extends BaseMSHR[DirResult, SelfDirWrite, S
   def a_schedule(): Unit = {
     // A channel requests
     // TODO: consider parameterized write-through policy for put/atomics
-    s_execute := req.opcode === Hint
+    s_execute := req.opcode === Hint || (req.opcode === AcquireBlock && req.isPrefetch.getOrElse(false.B))
     when(!self_meta.hit && self_meta.state =/= INVALID && replace_need_release &&
       (
         (preferCache && (req.opcode === AcquireBlock || req.opcode === Get)) ||
@@ -793,7 +794,7 @@ class MSHR()(implicit p: Parameters) extends BaseMSHR[DirResult, SelfDirWrite, S
         }
     }
     // need grantack
-    when(req_acquire) {
+    when(req_acquire && !req.isPrefetch.getOrElse(false.B)) {
       w_grantack := false.B
       when(!acquirePermMiss && (self_meta.hit || preferCache)) {
         s_wbselfdir := false.B
@@ -851,7 +852,7 @@ class MSHR()(implicit p: Parameters) extends BaseMSHR[DirResult, SelfDirWrite, S
       }
       when(req.fromA) {
         s_execute := false.B
-        when(req_acquire){
+        when(req_acquire && !req.isPrefetch.getOrElse(false.B)){
           w_grantack := false.B
         }
       }
