@@ -130,7 +130,7 @@ class Prefetcher(parentName:String = "UnKnown")(implicit p: Parameters) extends 
       //llc prefetchSend
       io_llc.get.pf_en := true.B
       io_llc.get.addr_valid := io.req.valid
-      io_llc.get.addr := Cat(io.req.bits.tag, io.req.bits.set, 0.U((offsetBits + bankBits).W))
+      io_llc.get.addr := Cat(io.req.bits.tag, io.req.bits.set, 0.U((offsetBits).W))
     }
     case(true ,false,_,3) => {
       println(s"L${cacheParams.name}Prefetch Config: l2bop hint2LLC + l3PrefetchReceiver_llc")
