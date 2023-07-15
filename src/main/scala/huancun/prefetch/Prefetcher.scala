@@ -103,8 +103,7 @@ class Prefetcher(parentName:String = "UnKnown")(implicit p: Parameters) extends 
       }
     }
     case(_ ,true ,true ,2) => {
-      println("l2Prefetch Config: l1pfRecv + l2bop + l3pfSend")
-      println(s"L${cacheParams.name} prefetcher: BestOffsetPrefetch+PrefetchSender")
+      println(s"${cacheParams.name} prefetcher: BestOffsetPrefetch+PrefetchSender")
       val l1_pf = Module(new PrefetchReceiver())
       val bop = Module(new BestOffsetPrefetch())
       val pftQueue = Module(new PrefetchQueue)

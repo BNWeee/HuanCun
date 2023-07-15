@@ -18,8 +18,8 @@ class l2PrefetchRecv extends PrefetchRecv {
 }
 class l2PrefetchSend extends PrefetchRecv {
 }
-class l3PrefetchRecv extends Bundle{
-  val data=Vec(2,new l2PrefetchRecv())
+class l3PrefetchRecv extends PrefetchRecv{
+  //val data=Vec(2,new l2PrefetchRecv())
 }
 
 case class PrefetchReceiverParams(n: Int = 32) extends PrefetchParameters {
@@ -57,8 +57,8 @@ class PrefetchReceiver_llc()(implicit p: Parameters) extends PrefetchModule {
 }
 
 class PrefetchReceiverXbar(val clientNum:Int=2)(implicit p: Parameters) extends LazyModule{
-  val inNode = Seq.fill(clientNum)(BundleBridgeSink(Some(() => new huancun.prefetch.l2PrefetchRecv())))
-  val outNode = Seq.fill(1)(BundleBridgeSource(Some(() => new huancun.prefetch.l2PrefetchRecv())))
+  val inNode = Seq.fill(clientNum)(BundleBridgeSink(Some(() => new l2PrefetchSend())))
+  val outNode = Seq.fill(1)(BundleBridgeSource(Some(() => new l2PrefetchRecv())))
   lazy val module = new LazyModuleImp(this){
     val arbiter = Module(new Arbiter(new huancun.prefetch.l2PrefetchRecv(), clientNum))
     arbiter.suggestName(s"pf_l3recv_node_arb")
