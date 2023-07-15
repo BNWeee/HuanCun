@@ -253,7 +253,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
   val pf_l3recv_node = cacheParams.level match{
     case 3 =>
       prefetchRecvOpt match {
-        case Some(x) =>  Some(BundleBridgeSink(Some(() => new huancun.prefetch.l2PrefetchRecv())))
+        case Some(x) =>  Some(BundleBridgeSink(Some(() => new huancun.prefetch.l3PrefetchRecv())))
         case _ => None
       }
     case _ => None
