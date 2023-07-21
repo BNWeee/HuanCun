@@ -523,12 +523,13 @@ class Slice(parentName: String = "Unknown")(implicit p: Parameters) extends Huan
         abc_mshr.map(_.io.tasks.prefetch_train.get),
         Some("prefetchTrain")
       )
+      arbTasks(
+        pft.resp,
+        abc_mshr.map(_.io.tasks.prefetch_resp.get),
+        Some("prefetchResp")
+      )
     })
-    arbTasks(
-      pft.resp,
-      abc_mshr.map(_.io.tasks.prefetch_resp.get),
-      Some("prefetchResp")
-    )
+
     for (mshr <- Seq(bc_mshr, c_mshr)) {
       mshr.io.tasks.prefetch_train.foreach(_.ready := true.B)
       mshr.io.tasks.prefetch_resp.foreach(_.ready := true.B)

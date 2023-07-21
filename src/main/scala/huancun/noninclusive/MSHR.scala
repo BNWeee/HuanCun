@@ -1288,7 +1288,7 @@ class MSHR()(implicit p: Parameters) extends BaseMSHR[DirResult, SelfDirWrite, S
       s_triggerprefetch.get := true.B
     }
   }
-  if(prefetchOpt.nonEmpty||prefetchRecvOpt.nonEmpty){
+  if(prefetchOpt.nonEmpty){
     when(io.tasks.prefetch_resp.get.fire()) {
       s_prefetchack.get := true.B
     }
