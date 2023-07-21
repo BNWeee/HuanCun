@@ -36,6 +36,7 @@ trait HasHuanCunParameters {
   val p: Parameters
   val cacheParams = p(HCCacheParamsKey)
   val prefetchOpt = cacheParams.prefetch
+  val prefetchRecvOpt = cacheParams.prefetchRecv
   val hasPrefetchBit = prefetchOpt.nonEmpty && prefetchOpt.get.hasPrefetchBit
   val hasAliasBits = if(cacheParams.clientCaches.isEmpty) false
     else cacheParams.clientCaches.head.needResolveAlias
@@ -301,6 +302,12 @@ class HuanCun(implicit p: Parameters) extends LazyModule with HasHuanCunParamete
       case None =>
         prefetcher.foreach(_.io.recv_addr := DontCare)
         prefetcher.foreach(_.io_l2_pf_en := DontCare)
+    }
+
+    println(s"Coupledl2 huancun: cache level: ${cacheParams.level}")
+    prefetchRecvOpt match {
+      case Some(x) =>  Some(BundleBridgeSink(Some(() => new PrefetchRecv())))
+      case _ => None
     }
 
     def bank_eq(set: UInt, bankId: Int, bankBits: Int): Bool = {
