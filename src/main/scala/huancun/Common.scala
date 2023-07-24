@@ -21,6 +21,7 @@ package huancun
 
 import chipsalliance.rocketchip.config.Parameters
 import chisel3._
+import huancun.prefetch.PrefetchBundle
 
 abstract class InnerTask(implicit p: Parameters) extends HuanCunBundle {
   val sourceId = UInt(sourceIdBits.W)
@@ -225,4 +226,10 @@ class PrefetchRecv extends Bundle {
   val addr = UInt(64.W)
   val addr_valid = Bool()
   val l2_pf_en = Bool()
+}
+
+class LlcPrefetchRecv extends Bundle {
+  val needT = Bool()
+  val addr = UInt(64.W)
+  val addr_valid = Bool()
 }
