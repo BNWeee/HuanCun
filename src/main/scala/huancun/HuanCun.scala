@@ -536,6 +536,7 @@ class HuanCun(parentName:String = "Unknown")(implicit p: Parameters) extends Laz
         llcRecvQ.io.enq.bits.needT      := pf_l3recv_node.get.in.head._1.needT     
         llcRecvQ.io.enq.bits.addr       := pf_l3recv_node.get.in.head._1.addr      
         llcRecvQ.io.enq.bits.addr_valid := pf_l3recv_node.get.in.head._1.addr_valid
+        llcRecvQ.io.enq.bits.source     := pf_l3recv_node.get.in.head._1.source
         slices.zipWithIndex.map{
           case(s: Slice, i) =>
             s.io.llcRecv.get.valid := llcRecvQ.io.deq.valid && bank_eq(s.parseFullAddress(llcRecvQ.io.deq.bits.addr)._2, i, bankBits)

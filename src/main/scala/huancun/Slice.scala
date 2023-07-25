@@ -149,18 +149,19 @@ class Slice(parentName: String = "Unknown")(implicit p: Parameters) extends Huan
     } else {
       a_req_buffer.io.in <> a_req
     }
-    }else if (cacheParams.level == 3) {
+  }else if (cacheParams.level == 3) {
       if(prefetchLlcRecvOpt.nonEmpty){
         val alloc_A_arb = Module(new Arbiter(new MSHRRequest, 2))
         alloc_A_arb.io.in(0) <> a_req
-        alloc_A_arb.io.in(1) <> DontCare
-        val test = sppLlcReqToMSHRReq(io.llcRecv.get)
-        XSPerfAccumulate(cacheParams, s"L3_slice_receiver_hit", test.valid)
+        alloc_A_arb.io.in(1) <> sppLlcReqToMSHRReq(io.llcRecv.get)
         a_req_buffer.io.in <> alloc_A_arb.io.out
+        XSPerfAccumulate(cacheParams, "L3_slice_receiver_hit", alloc_A_arb.io.in(1).valid && (alloc_A_arb.io.in(1).bits.opcode === TLMessages.Hint))
       } else {
         a_req_buffer.io.in <> a_req
       }
-    } 
+    } else{
+      a_req_buffer.io.in <> a_req
+    }
 
 
   mshrAlloc.io.a_req <> a_req_buffer.io.out
@@ -659,10 +660,10 @@ class Slice(parentName: String = "Unknown")(implicit p: Parameters) extends Huan
     val address = pftReq.bits.addr
     val (tag, set, off) = parseAddress(address)
     mshrReq.valid := pftReq.valid
-    mshrReq.bits.opcode := TLMessages.AcquireBlock
+    mshrReq.bits.opcode := TLMessages.Hint
     mshrReq.bits.param := Mux(pftReq.bits.needT, TLHints.PREFETCH_WRITE, TLHints.PREFETCH_READ)
     mshrReq.bits.size := log2Up(blockBytes).U
-    mshrReq.bits.source := 0.U
+    mshrReq.bits.source := pftReq.bits.source
     mshrReq.bits.tag := tag
     mshrReq.bits.set := set
     mshrReq.bits.off := off
