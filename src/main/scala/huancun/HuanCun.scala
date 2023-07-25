@@ -31,12 +31,13 @@ import utils.{ResetGen, XSPerfAccumulate}
 import utility.{Pipeline, FastArbiter}
 import huancun.noninclusive.MSHR
 import chisel3.util.experimental.BoringUtils
+import huancun.LlcPrefetchRecv
 
 trait HasHuanCunParameters {
   val p: Parameters
   val cacheParams = p(HCCacheParamsKey)
   val prefetchOpt = cacheParams.prefetch
-  val prefetchRecvOpt = cacheParams.prefetchRecv
+  val prefetchLlcRecvOpt = cacheParams.prefetchRecv
   val hasPrefetchBit = prefetchOpt.nonEmpty && prefetchOpt.get.hasPrefetchBit
   val hasAliasBits = if(cacheParams.clientCaches.isEmpty) false
     else cacheParams.clientCaches.head.needResolveAlias
@@ -235,6 +236,16 @@ class HuanCun(implicit p: Parameters) extends LazyModule with HasHuanCunParamete
     case _ => None
   }
 
+  println(s"cpl2 Huancun: cache level: ${cacheParams.level}")
+  val pf_l3recv_node = cacheParams.level match{
+  case 3 =>
+    prefetchLlcRecvOpt match {
+      case Some(x) =>  Some(BundleBridgeSink(Some(() => new LlcPrefetchRecv)))
+      case _ => None
+    }
+  case _ => None
+  }
+
   lazy val module = new LazyModuleImp(this) {
     val banks = node.in.size
     val io = IO(new Bundle {
@@ -304,12 +315,6 @@ class HuanCun(implicit p: Parameters) extends LazyModule with HasHuanCunParamete
         prefetcher.foreach(_.io_l2_pf_en := DontCare)
     }
 
-    println(s"Coupledl2 huancun: cache level: ${cacheParams.level}")
-    prefetchRecvOpt match {
-      case Some(x) =>  Some(BundleBridgeSink(Some(() => new PrefetchRecv())))
-      case _ => None
-    }
-
     def bank_eq(set: UInt, bankId: Int, bankBits: Int): Bool = {
       if(bankBits == 0) true.B else set(bankBits - 1, 0) === bankId.U
     }
@@ -343,31 +348,32 @@ class HuanCun(implicit p: Parameters) extends LazyModule with HasHuanCunParamete
         out <> slice.io.out
         out.a.bits.address := restoreAddress(slice.io.out.a.bits.address, i)
         out.c.bits.address := restoreAddress(slice.io.out.c.bits.address, i)
-
-        slice.io.prefetch.zip(prefetcher).foreach {
-          case (s, p) =>
-            s.req.valid := p.io.req.valid && bank_eq(p.io.req.bits.set, i, bankBits)
-            s.req.bits := p.io.req.bits
-            prefetchReqsReady(i) := s.req.ready && bank_eq(p.io.req.bits.set, i, bankBits)
-            val train = Pipeline(s.train)
-            val resp = Pipeline(s.resp)
-            prefetchTrains.get(i) <> train
-            prefetchResps.get(i) <> resp
-            // restore to full address
-            if(bankBits != 0){
-              val train_full_addr = Cat(
-                train.bits.tag, train.bits.set, i.U(bankBits.W), 0.U(offsetBits.W)
-              )
-              val (train_tag, train_set, _) = s.parseFullAddress(train_full_addr)
-              val resp_full_addr = Cat(
-                resp.bits.tag, resp.bits.set, i.U(bankBits.W), 0.U(offsetBits.W)
-              )
-              val (resp_tag, resp_set, _) = s.parseFullAddress(resp_full_addr)
-              prefetchTrains.get(i).bits.tag := train_tag
-              prefetchTrains.get(i).bits.set := train_set
-              prefetchResps.get(i).bits.tag := resp_tag
-              prefetchResps.get(i).bits.set := resp_set
-            }
+        if(cacheParams.level == 2) {
+          slice.io.prefetch.zip(prefetcher).foreach {
+            case (s, p) =>
+              s.req.valid := p.io.req.valid && bank_eq(p.io.req.bits.set, i, bankBits)
+              s.req.bits := p.io.req.bits
+              prefetchReqsReady(i) := s.req.ready && bank_eq(p.io.req.bits.set, i, bankBits)
+              val train = Pipeline(s.train)
+              val resp = Pipeline(s.resp)
+              prefetchTrains.get(i) <> train
+              prefetchResps.get(i) <> resp
+              // restore to full address
+              if(bankBits != 0){
+                val train_full_addr = Cat(
+                  train.bits.tag, train.bits.set, i.U(bankBits.W), 0.U(offsetBits.W)
+                )
+                val (train_tag, train_set, _) = s.parseFullAddress(train_full_addr)
+                val resp_full_addr = Cat(
+                  resp.bits.tag, resp.bits.set, i.U(bankBits.W), 0.U(offsetBits.W)
+                )
+                val (resp_tag, resp_set, _) = s.parseFullAddress(resp_full_addr)
+                prefetchTrains.get(i).bits.tag := train_tag
+                prefetchTrains.get(i).bits.set := train_set
+                prefetchResps.get(i).bits.tag := resp_tag
+                prefetchResps.get(i).bits.set := resp_set
+              }
+          }
         }
         io.perfEvents(i) := slice.perfinfo
         slice
@@ -456,6 +462,25 @@ class HuanCun(implicit p: Parameters) extends LazyModule with HasHuanCunParamete
       val l3_loads_bound = stall_l2_load_miss && !stall_l3_miss
       XSPerfAccumulate(cacheParams, "l3_loads_bound", l3_loads_bound)
       XSPerfAccumulate(cacheParams, "ddr_loads_bound", stall_l3_load_miss)
+    }
+        if(cacheParams.level == 3){
+      prefetchLlcRecvOpt.map{_ =>
+        val llcRecvQ = Module(new Queue(new LlcPrefetchRecv, entries=16, pipe=true, flow=true))
+        llcRecvQ.io.enq.valid := pf_l3recv_node.get.in.head._1.addr_valid
+        llcRecvQ.io.enq.bits.needT      := pf_l3recv_node.get.in.head._1.needT     
+        llcRecvQ.io.enq.bits.addr       := pf_l3recv_node.get.in.head._1.addr      
+        llcRecvQ.io.enq.bits.addr_valid := pf_l3recv_node.get.in.head._1.addr_valid
+        llcRecvQ.io.enq.bits.source     := pf_l3recv_node.get.in.head._1.source
+        slices.zipWithIndex.map{
+          case(s: Slice, i) =>
+            s.io.llcRecv.get.valid := llcRecvQ.io.deq.valid && bank_eq(s.parseFullAddress(llcRecvQ.io.deq.bits.addr)._2, i, bankBits)
+            s.io.llcRecv.get.bits  := llcRecvQ.io.deq.bits
+        }
+        llcRecvQ.io.deq.ready := VecInit(slices.map((slice: Slice) => slice.io.llcRecv.get.ready)).asUInt.orR
+        XSPerfAccumulate(cacheParams, "L3_receiver_hit", pf_l3recv_node.get.in.head._1.addr_valid)
+        XSPerfAccumulate(cacheParams, "L3_Slice_received_pf", VecInit(slices.map((slice: Slice) => slice.io.llcRecv.get.valid)).asUInt.orR)
+        XSPerfAccumulate(cacheParams, "L3_Slice_can_receive_pf", VecInit(slices.map((slice: Slice) => slice.io.llcRecv.get.ready)).asUInt.orR)
+      }
     }
   }
 
