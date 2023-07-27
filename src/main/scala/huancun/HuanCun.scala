@@ -240,7 +240,7 @@ class HuanCun(implicit p: Parameters) extends LazyModule with HasHuanCunParamete
   val pf_l3recv_node = cacheParams.level match{
   case 3 =>
     prefetchLlcRecvOpt match {
-      case Some(x) =>  Some(BundleBridgeSink(Some(() => new LlcPrefetchRecv)))
+      case Some(_: PrefetchReceiverParams) =>  Some(BundleBridgeSink(Some(() => new LlcPrefetchRecv)))
       case _ => None
     }
   case _ => None
